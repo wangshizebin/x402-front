@@ -1,7 +1,7 @@
 {
-  "name": "browser-wallet-x402-example",
+  "name": "x402-demo",
   "version": "1.0.0",
-  "description": "Example of x402 payments with browser wallet integration",
+  "description": "x402-demo",
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",

@@ -141,7 +141,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           const client = createWalletClient({
             account: accounts[0] as Hex,
             chain: baseSepolia,
-            transport: custom(window.ethereum)
+            transport: custom(window.ethereum!)
           });
           
           setWalletClient(client);
@@ -159,8 +159,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       window.ethereum.on('chainChanged', handleChainChanged);
 
       return () => {
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
-        window.ethereum.removeListener('chainChanged', handleChainChanged);
+        window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
+        window.ethereum?.removeListener('chainChanged', handleChainChanged);
       };
     }
   }, [address, disconnectWallet]);

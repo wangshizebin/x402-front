@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { cors } from "hono/cors";
 import { paymentMiddleware, Network, Resource } from "x402-hono";
-import { v4 as uuidv4 } from "uuid";
 
 config();
 
@@ -12,6 +11,8 @@ const facilitatorUrl = process.env.FACILITATOR_URL as Resource || "https://x402.
 const payTo = process.env.ADDRESS as `0x${string}`;
 const network = (process.env.NETWORK as Network) || "base-sepolia";
 const port = parseInt(process.env.PORT || "3001");
+const imageUrl = process.env.IMAGE_URL || "https://x402.taolimarket.com/frog.jpg";
+const imagePrice = process.env.IMAGE_PRICE || "$0.1";
 
 if (!payTo) {
   console.error("❌ Please set your wallet ADDRESS in the .env file");
@@ -26,30 +27,23 @@ app.use("/*", cors({
   credentials: true,
 }));
 
-// Simple in-memory storage for sessions (use Redis/DB in production)
-interface Session {
-  id: string;
-  createdAt: Date;
-  expiresAt: Date;
-  type: "24hour" | "onetime";
-  used?: boolean;
+// Simple in-memory storage for paid users (use Redis/DB in production)
+// Store wallet addresses that have paid and their access start time
+interface UserAccess {
+  startTime: Date;
 }
 
-const sessions = new Map<string, Session>();
+const paidUsers = new Map<string, UserAccess>();
+const VIEW_DURATION_MS = 30 * 1000; // 30 seconds
 
-// Configure x402 payment middleware with two payment options
+// Configure x402 payment middleware for image payment
 app.use(
   paymentMiddleware(
     payTo,
     {
-      // 24-hour session access
-      "/api/pay/session": {
-        price: "$1.00",
-        network,
-      },
-      // One-time access/payment
-      "/api/pay/onetime": {
-        price: "$0.10",
+      // Image payment endpoint
+      "/api/pay/image": {
+        price: imagePrice,
         network,
       },
     },
@@ -59,171 +53,100 @@ app.use(
   ),
 );
 
-// Free endpoint - health check
-app.get("/api/health", (c) => {
+// Free endpoint - get payment info
+app.get("/api/payment-info", (c) => {
   return c.json({
-    status: "ok",
-    message: "Server is running",
-    config: {
-      network,
-      payTo,
-      facilitator: facilitatorUrl,
-    },
+    price: imagePrice,
+    description: "支付以解锁付费图片内容（可查看30秒）",
+    endpoint: "/api/pay/image",
   });
 });
 
-// Free endpoint - get payment options
-app.get("/api/payment-options", (c) => {
-  return c.json({
-    options: [
-      {
-        name: "24-Hour Access",
-        endpoint: "/api/pay/session",
-        price: "$1.00",
-        description: "Get a session ID for 24 hours of unlimited access",
-      },
-      {
-        name: "One-Time Access",
-        endpoint: "/api/pay/onetime",
-        price: "$0.10",
-        description: "Single use payment for immediate access",
-      },
-    ],
-  });
-});
-
-// Paid endpoint - 24-hour session access ($1.00)
-app.post("/api/pay/session", (c) => {
-  const sessionId = uuidv4();
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24 hours
+// Paid endpoint - purchase image access
+app.post("/api/pay/image", (c) => {
+  // Get wallet address from payment context
+  // Note: x402 middleware should provide payment context
+  // For now, we'll use a simple approach - in production, verify the payment signature
+  const walletAddress = c.req.header("x-wallet-address");
   
-  const session: Session = {
-    id: sessionId,
-    createdAt: now,
-    expiresAt,
-    type: "24hour",
-  };
-
-  sessions.set(sessionId, session);
-
-  return c.json({
-    success: true,
-    sessionId,
-    message: "24-hour access granted!",
-    session: {
-      id: sessionId,
-      type: "24hour",
-      createdAt: now.toISOString(),
-      expiresAt: expiresAt.toISOString(),
-      validFor: "24 hours",
-    },
-  });
-});
-
-// Paid endpoint - one-time access/payment ($0.10)
-app.post("/api/pay/onetime", async (c) => {
-  const sessionId = uuidv4();
-  const now = new Date();
-  
-  const session: Session = {
-    id: sessionId,
-    createdAt: now,
-    expiresAt: new Date(now.getTime() + 5 * 60 * 1000), // 5 minutes to use
-    type: "onetime",
-    used: false,
-  };
-
-  sessions.set(sessionId, session);
-
-  return c.json({
-    success: true,
-    sessionId,
-    message: "One-time access granted!",
-    access: {
-      id: sessionId,
-      type: "onetime",
-      createdAt: now.toISOString(),
-      validFor: "5 minutes (single use)",
-    },
-  });
-});
-
-// Free endpoint - validate session
-app.get("/api/session/:sessionId", (c) => {
-  const sessionId = c.req.param("sessionId");
-  const session = sessions.get(sessionId);
-
-  if (!session) {
-    return c.json({ valid: false, error: "Session not found" }, 404);
-  }
-
-  const now = new Date();
-  const isExpired = now > session.expiresAt;
-  const isUsed = session.type === "onetime" && session.used;
-
-  if (isExpired || isUsed) {
-    return c.json({ 
-      valid: false, 
-      error: isExpired ? "Session expired" : "One-time access already used",
-      session: {
-        id: session.id,
-        type: session.type,
-        createdAt: session.createdAt.toISOString(),
-        expiresAt: session.expiresAt.toISOString(),
-        used: session.used,
-      }
+  if (walletAddress) {
+    const normalizedAddress = walletAddress.toLowerCase();
+    // Record the start time when user pays
+    paidUsers.set(normalizedAddress, {
+      startTime: new Date(),
     });
   }
 
-  // Mark one-time sessions as used
-  if (session.type === "onetime") {
-    session.used = true;
-    sessions.set(sessionId, session);
-  }
-
   return c.json({
-    valid: true,
-    session: {
-      id: session.id,
-      type: session.type,
-      createdAt: session.createdAt.toISOString(),
-      expiresAt: session.expiresAt.toISOString(),
-      remainingTime: session.expiresAt.getTime() - now.getTime(),
-    },
+    success: true,
+    message: "支付成功！已获得图片访问权限，可查看30秒。",
+    imageUrl: imageUrl,
+    startTime: new Date().toISOString(),
+    duration: 30, // seconds
   });
 });
 
-// Free endpoint - list active sessions (for demo purposes)
-app.get("/api/sessions", (c) => {
-  const activeSessions = Array.from(sessions.values())
-    .filter(session => {
-      const isExpired = new Date() > session.expiresAt;
-      const isUsed = session.type === "onetime" && session.used;
-      return !isExpired && !isUsed;
-    })
-    .map(session => ({
-      id: session.id,
-      type: session.type,
-      createdAt: session.createdAt.toISOString(),
-      expiresAt: session.expiresAt.toISOString(),
-    }));
+// Free endpoint - get image URL (requires payment verification)
+app.get("/api/image", (c) => {
+  const walletAddress = c.req.header("x-wallet-address");
+  
+  if (!walletAddress) {
+    return c.json({ 
+      error: "需要钱包地址",
+      paid: false 
+    }, 401);
+  }
 
-  return c.json({ sessions: activeSessions });
+  const normalizedAddress = walletAddress.toLowerCase();
+  const userAccess = paidUsers.get(normalizedAddress);
+  
+  if (!userAccess) {
+    return c.json({ 
+      error: "需要支付才能访问图片",
+      paid: false,
+      paymentEndpoint: "/api/pay/image",
+      price: imagePrice,
+    }, 403);
+  }
+
+  // Check if 30 seconds have passed
+  const now = new Date();
+  const elapsed = now.getTime() - userAccess.startTime.getTime();
+  const remaining = Math.max(0, VIEW_DURATION_MS - elapsed);
+  const hasExpired = elapsed >= VIEW_DURATION_MS;
+
+  if (hasExpired) {
+    // Remove expired access
+    paidUsers.delete(normalizedAddress);
+    return c.json({ 
+      error: "查看时间已过期。请重新支付以查看图片。",
+      paid: false,
+      expired: true,
+      paymentEndpoint: "/api/pay/image",
+      price: imagePrice,
+    }, 403);
+  }
+
+  return c.json({
+    success: true,
+    paid: true,
+    imageUrl: imageUrl,
+    startTime: userAccess.startTime.toISOString(),
+    remainingSeconds: Math.ceil(remaining / 1000),
+    totalDuration: 30,
+  });
 });
 
 console.log(`
-🚀 x402 Payment Template Server
+🖼️  x402 Premium Image Server
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 Accepting payments to: ${payTo}
 🔗 Network: ${network}
 🌐 Port: ${port}
+🖼️  Image URL: ${imageUrl}
+💵 Price: ${imagePrice}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Payment Options:
-   - 24-Hour Session: $1.00
-   - One-Time Access: $0.10
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🛠️  This is a template! Customize it for your app.
+🛠️  Premium image content - payment required
 📚 Learn more: https://x402.org
 💬 Get help: https://discord.gg/invite/cdp
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

@@ -5,8 +5,6 @@
 - USDC测试币水龙头：https://faucet.circle.com/
 - x402体验地址：https://www.x402.org/protected
 - x402协议地址：https://www.x402.org
-- x402源代码地址：https://github.com/coinbase/x402
-- x402例子地址：https://github.com/coinbase/x402/tree/main/examples/typescript/fullstack/browser-wallet-example
 - base sepolia 区块链配置：
 rpc url：https://sepolia.base.org
 chainid：84532

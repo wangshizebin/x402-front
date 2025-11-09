@@ -15,7 +15,7 @@ export function WalletConnect() {
           <span className="status-indicator">●</span>
           <span className="address">{formatAddress(address)}</span>
           <button onClick={disconnectWallet} className="disconnect-btn">
-            Disconnect
+            断开连接
           </button>
         </div>
       </div>
@@ -29,7 +29,7 @@ export function WalletConnect() {
         disabled={isConnecting}
         className="connect-btn"
       >
-        {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+        {isConnecting ? '连接中...' : '连接钱包'}
       </button>
       {error && (
         <div className="error-message">

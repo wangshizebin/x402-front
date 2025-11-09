@@ -1,5 +1,5 @@
 {
-  "name": "x402-client-example",
+  "name": "x402-client",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -8,11 +8,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "axios": "^1.10.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "viem": "^2.31.3",
-    "axios": "^1.10.0",
-    "x402-axios": "^0.4.0"
+    "x402-axios": "^0.4.2"
   },
   "devDependencies": {
     "@types/react": "^18.3.17",
@@ -21,4 +21,4 @@
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
   }
-} 
+}

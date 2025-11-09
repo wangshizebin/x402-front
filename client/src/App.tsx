@@ -1,259 +1,192 @@
 import React, { useState, useEffect } from 'react';
 import { WalletConnect } from './components/WalletConnect';
 import { useWallet } from './contexts/WalletContext';
-import { api, updateApiClient, type PaymentOption, type Session } from './services/api';
+import { api, updateApiClient, type PaymentInfo, type ImageResponse } from './services/api';
 import './App.css';
 
 function App() {
-  const { walletClient } = useWallet();
-  const [serverStatus, setServerStatus] = useState<string>('checking...');
-  const [paymentOptions, setPaymentOptions] = useState<PaymentOption[]>([]);
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading, setLoading] = useState<string | null>(null);
-  const [sessionInput, setSessionInput] = useState<string>('');
-  const [validationResult, setValidationResult] = useState<any>(null);
+  const { walletClient, address, isConnected } = useWallet();
+  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasPaid, setHasPaid] = useState<boolean>(false);
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(null);
+  const [startTime, setStartTime] = useState<Date | null>(null);
 
   // Update API client when wallet changes
   useEffect(() => {
     updateApiClient(walletClient);
-  }, [walletClient]);
+    if (isConnected && address) {
+      checkImageAccess();
+    } else {
+      setImageUrl(null);
+      setHasPaid(false);
+    }
+  }, [walletClient, isConnected, address]);
 
-  // Check server health on mount
+  // Load payment info on mount
   useEffect(() => {
-    checkServerHealth();
-    loadPaymentOptions();
-    loadActiveSessions();
+    loadPaymentInfo();
   }, []);
 
-  const checkServerHealth = async () => {
+  const loadPaymentInfo = async () => {
     try {
-      const health = await api.getHealth();
-      setServerStatus(`✅ Connected to ${health.config.network}`);
+      const data = await api.getPaymentInfo();
+      setPaymentInfo(data);
     } catch (error) {
-      setServerStatus('❌ Server offline');
+      console.error('Failed to load payment info:', error);
     }
   };
 
-  const loadPaymentOptions = async () => {
+  const checkImageAccess = async () => {
+    if (!address) return;
     try {
-      const data = await api.getPaymentOptions();
-      setPaymentOptions(data.options);
-    } catch (error) {
-      console.error('Failed to load payment options:', error);
-    }
-  };
-
-  const loadActiveSessions = async () => {
-    try {
-      const data = await api.getActiveSessions();
-      setSessions(data.sessions);
-    } catch (error) {
-      console.error('Failed to load sessions:', error);
-    }
-  };
-
-  const handle24HourSession = async () => {
-    setLoading('session');
-    try {
-      const result = await api.purchase24HourSession();
-      await loadActiveSessions();
-      setValidationResult({
-        type: 'success',
-        message: result.message,
-        session: result.session,
-      });
+      const response: ImageResponse = await api.getImage(address);
+      if (response.paid && response.imageUrl) {
+        setImageUrl(response.imageUrl);
+        setHasPaid(true);
+        setError(null);
+        if (response.startTime) {
+          setStartTime(new Date(response.startTime));
+        }
+        if (response.remainingSeconds !== undefined) {
+          setRemainingSeconds(response.remainingSeconds);
+        }
+      } else {
+        setHasPaid(false);
+        setImageUrl(null);
+        setRemainingSeconds(null);
+        setStartTime(null);
+        if (response.expired) {
+          setError('查看时间已过期。请重新支付以查看图片。');
+        }
+      }
     } catch (error: any) {
-      setValidationResult({
-        type: 'error',
-        message: error.message || 'Failed to purchase session',
-      });
-    } finally {
-      setLoading(null);
+      if (error.response?.status === 403) {
+        const errorData = error.response.data;
+        setHasPaid(false);
+        setImageUrl(null);
+        setRemainingSeconds(null);
+        setStartTime(null);
+        if (errorData?.expired) {
+          setError('查看时间已过期。请重新支付以查看图片。');
+        }
+      } else {
+        console.error('Failed to check image access:', error);
+      }
     }
   };
 
-  const handleOneTimeAccess = async () => {
-    setLoading('onetime');
-    try {
-      const result = await api.purchaseOneTimeAccess();
-      await loadActiveSessions();
-      setValidationResult({
-        type: 'success',
-        message: result.message,
-        access: result.access,
-      });
-    } catch (error: any) {
-      setValidationResult({
-        type: 'error',
-        message: error.message || 'Failed to purchase access',
-      });
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  const validateSession = async () => {
-    if (!sessionInput.trim()) {
-      setValidationResult({
-        type: 'error',
-        message: 'Please enter a session ID',
-      });
+  // Countdown timer effect
+  useEffect(() => {
+    if (!hasPaid || !startTime || remainingSeconds === null) {
       return;
     }
 
+    const interval = setInterval(() => {
+      const now = new Date();
+      const elapsed = now.getTime() - startTime.getTime();
+     
+      const remaining = Math.max(0, 30000 - elapsed); // 30 seconds in ms
+      const remainingSec = Math.ceil(remaining / 1000);
+
+      if (remainingSec <= 0) {
+        setRemainingSeconds(0);
+        setHasPaid(false);
+        setImageUrl(null);
+        setError('查看时间已过期。请重新支付以查看图片。');
+        clearInterval(interval);
+      } else {
+        setRemainingSeconds(remainingSec);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [hasPaid, startTime, remainingSeconds]);
+
+  const handlePurchaseImage = async () => {
+    if (!isConnected) {
+      setError('请先连接您的钱包');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    
     try {
-      const result = await api.validateSession(sessionInput);
-      setValidationResult(result);
-      if (result.valid && result.session?.type === 'onetime') {
-        // Refresh sessions since one-time was just used
-        await loadActiveSessions();
+      const result = await api.purchaseImage();
+      if (result.success && result.imageUrl) {
+        setImageUrl(result.imageUrl);
+        setHasPaid(true);
+        setError(null);
+        if (result.startTime) {
+          setStartTime(new Date(result.startTime));
+        }
+        if (result.duration) {
+          setRemainingSeconds(result.duration);
+        }
       }
     } catch (error: any) {
-      setValidationResult({
-        type: 'error',
-        message: error.message || 'Failed to validate session',
-      });
+      setError(error.message || '购买图片访问权限失败');
+      console.error('Purchase error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="app">
-      <header>
-        <h1>x402 Payment Template</h1>
-        <p>Build your own payment-enabled app with this starter template</p>
-        <div className="server-status">{serverStatus}</div>
-      </header>
-
       <main>
-        <section className="wallet-section">
-          <h2>1. Connect Your Wallet</h2>
-          <WalletConnect />
-        </section>
-
-        <section className="payment-section">
-          <h2>2. Payment Options</h2>
-          <div className="payment-grid">
-            {paymentOptions.map((option) => (
-              <div key={option.endpoint} className="payment-card">
-                <h3>{option.name}</h3>
-                <p className="price">{option.price}</p>
-                <p className="description">{option.description}</p>
-                
-                {option.endpoint === '/api/pay/session' && (
-                  <button 
-                    onClick={handle24HourSession}
-                    disabled={loading === 'session'}
-                    className="action-btn"
-                  >
-                    {loading === 'session' ? 'Processing...' : 'Purchase 24-Hour Session'}
-                  </button>
-                )}
-                
-                {option.endpoint === '/api/pay/onetime' && (
-                  <button 
-                    onClick={handleOneTimeAccess}
-                    disabled={loading === 'onetime'}
-                    className="action-btn"
-                  >
-                    {loading === 'onetime' ? 'Processing...' : 'Purchase One-Time Access'}
-                  </button>
-                )}
-              </div>
-            ))}
+        <section className="image-section">
+          <div className="section-header">
+            <h1>🖼️ X402 项目演示</h1>
+            <p>支付 USDC 测试币，解锁付费图片</p>
           </div>
-        </section>
-
-        <section className="validation-section">
-          <h2>3. Validate Session</h2>
-          <div className="session-validator">
-            <input
-              type="text"
-              placeholder="Enter session ID"
-              value={sessionInput}
-              onChange={(e) => setSessionInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && validateSession()}
-              className="session-input"
-            />
-            <button onClick={validateSession} className="validate-btn">
-              Check Session
-            </button>
+          <div className="wallet-connect-wrapper">
+            <WalletConnect />
           </div>
           
-          {validationResult && (
-            <div className={`validation-result ${validationResult.type || (validationResult.valid ? 'success' : 'error')}`}>
-              {validationResult.message && <p>{validationResult.message}</p>}
-              {validationResult.error && <p>❌ {validationResult.error}</p>}
-              {validationResult.valid && (
-                <div>
-                  <p>✅ Session is valid!</p>
-                  {validationResult.session && (
-                    <div className="session-details">
-                      <p><strong>Type:</strong> {validationResult.session.type}</p>
-                      <p><strong>Created:</strong> {new Date(validationResult.session.createdAt).toLocaleString()}</p>
-                      <p><strong>Expires:</strong> {new Date(validationResult.session.expiresAt).toLocaleString()}</p>
-                      {validationResult.session.remainingTime && (
-                        <p><strong>Remaining:</strong> {Math.floor(validationResult.session.remainingTime / 1000 / 60)} minutes</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-              {validationResult.session && !validationResult.valid && (
-                <div className="session-details">
-                  <p><strong>Session ID:</strong> {validationResult.session.id}</p>
-                  <p><strong>Type:</strong> {validationResult.session.type}</p>
-                  <p><strong>Status:</strong> {validationResult.error}</p>
-                </div>
-              )}
-              {validationResult.access && (
-                <div className="access-details">
-                  <p><strong>Access ID:</strong> {validationResult.access.id}</p>
-                  <p><strong>Valid for:</strong> {validationResult.access.validFor}</p>
-                </div>
+          {!isConnected ? (
+            <div className="image-placeholder">
+              <p>请首先连接您的钱包，然后点击支付按钮，支付成功后即可访问付费图片</p>
+            </div>
+          ) : hasPaid && imageUrl ? (
+            <div className="image-container">
+              <img 
+                src={imageUrl} 
+                alt="付费内容"
+                className="premium-image"
+              />
+              {remainingSeconds !== null && remainingSeconds > 0 && (
+                <p className="image-access-message">✅ 您已获得此付费内容的访问权限（剩余 {remainingSeconds} 秒）</p>
               )}
             </div>
+          ) : (
+            <>
+              {paymentInfo && (
+                <div className="payment-card">
+                  <h3>付费图片</h3>
+                  <p className="price">{paymentInfo.price}</p>
+                  <p className="description">{paymentInfo.description}</p>
+                  <button 
+                    onClick={handlePurchaseImage}
+                    disabled={loading}
+                    className="action-btn"
+                  >
+                    {loading ? '处理支付中...' : `支付 ${paymentInfo.price} 解锁`}
+                  </button>
+                </div>
+              )}
+              {error && (
+                <div className="error-message">
+                  {error}
+                </div>
+              )}
+            </>
           )}
         </section>
-
-        {sessions.length > 0 && (
-          <section className="sessions-section">
-            <h2>Active Sessions</h2>
-            <div className="sessions-list">
-              {sessions.map((session) => (
-                <div key={session.id} className="session-item">
-                  <code>{session.id}</code>
-                  <span className={`session-type ${session.type}`}>{session.type}</span>
-                  <span className="session-expires">
-                    Expires: {new Date(session.expiresAt).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
       </main>
-
-      <footer>
-        <p>
-          This simplified example demonstrates two payment models: 24-hour session access and one-time payments.
-          Each purchase requires approval in wallet.
-        </p>
-        <div className="builder-resources">
-          <h3>🛠️ Build with x402</h3>
-          <p>This is a template to help you build your own payment-enabled applications!</p>
-          <div className="resource-links">
-            <a href="https://x402.org" target="_blank" rel="noopener noreferrer">
-              📚 x402 Documentation
-            </a>
-            <a href="https://github.com/coinbase/x402" target="_blank" rel="noopener noreferrer">
-              💻 GitHub Repository
-            </a>
-            <a href="https://discord.gg/invite/cdp" target="_blank" rel="noopener noreferrer">
-              💬 Discord Community
-            </a>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
