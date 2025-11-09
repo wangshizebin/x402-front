@@ -142,6 +142,9 @@ function App() {
           <div className="section-header">
             <h1>🖼️ X402 项目演示</h1>
             <p>支付 USDC 测试币，解锁付费图片</p>
+            <div className="desc">x402 是一种开放支付标准，通过 HTTP 402 状态码，让 Web 服务在提供资源前直接要求付费，支持加密货币的原生支付方式，无需账户管理，无需支付Gas。</div>
+            <div><a className="claim-token" href="https://faucet.circle.com/" target='_blank'>领取测试币</a></div>
+            <div className="claim-token-desc">测试币选择 USDC，其中Network 选择 Base Sepolia</div>
           </div>
           <div className="wallet-connect-wrapper">
             <WalletConnect />

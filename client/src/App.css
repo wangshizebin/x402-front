@@ -37,6 +37,27 @@ body {
   color: #7f8c8d;
   margin: 0;
 }
+.section-header .desc{
+  padding: 15px;
+  color: #7f8c8d;
+  margin: 0;
+  font-size: 14px;
+}
+
+.section-header .claim-token {
+  text-decoration: none;
+  color: #3182ce;
+}
+.section-header .claim-token:hover {
+  color: #0000ee;
+}
+
+.section-header .claim-token-desc{
+  padding: 10px;
+  color: #27ae60;
+  margin: 0;
+  font-size: 12px;
+}
 
 .server-status {
   margin-top: 20px;
