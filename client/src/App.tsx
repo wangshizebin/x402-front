@@ -140,21 +140,29 @@ function App() {
       <main>
         <section className="image-section">
           <div className="section-header">
-            <h1>🖼️ X402 项目演示</h1>
-            <p>支付 USDC 测试币，解锁付费图片</p>
-            <div className="desc">x402 是一种开放支付标准，通过 HTTP 402 状态码，让 Web 服务在提供资源前直接要求付费，支持加密货币的原生支付方式，无需账户管理，无需支付Gas。</div>
-            <div><a className="claim-token" href="https://faucet.circle.com/" target='_blank'>领取测试币</a></div>
-            <div className="claim-token-desc">测试币选择 USDC，其中Network 选择 Base Sepolia</div>
+            <div className="hero-card">
+              <span className="hero-pill">HTTP 402 · Crypto Paywall</span>
+              <h1>X402 测试网</h1>
+              <p className="hero-subtitle">支付 USDC 测试币，体验 30 秒钟即时解锁的付费图片</p>
+              <ul className="hero-list">
+                <li>⚡️ 通过 HTTP 402 触发支付请求</li>
+                <li>🧾 无需账号体系，钱包即身份</li>
+                <li>🪙 原生支持加密货币支付</li>
+                <li>💰 消费者无需支付 Gas</li>
+              </ul>
+              <div className="hero-cta">
+                <a className="hero-link" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">
+                  领取测试币
+                </a>
+                <span className="hero-note">在 Circle Faucet 中选择 USDC · Network: Base Sepolia</span>
+              </div>
+            </div>
           </div>
           <div className="wallet-connect-wrapper">
             <WalletConnect />
           </div>
           
-          {!isConnected ? (
-            <div className="image-placeholder">
-              <p>请首先连接您的钱包，然后点击支付按钮，支付成功后即可访问付费图片</p>
-            </div>
-          ) : hasPaid && imageUrl ? (
+          {hasPaid && imageUrl ? (
             <div className="image-container">
               <img 
                 src={imageUrl} 
@@ -179,11 +187,11 @@ function App() {
                   >
                     {loading ? '处理支付中...' : `支付 ${paymentInfo.price} 解锁`}
                   </button>
-                </div>
-              )}
-              {error && (
-                <div className="error-message">
-                  {error}
+                  {error && (
+                    <div className="error-message inline">
+                      {error}
+                    </div>
+                  )}
                 </div>
               )}
             </>

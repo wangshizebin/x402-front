@@ -38,4 +38,4 @@ export function WalletConnect() {
       )}
     </div>
   );
-} 
+}

@@ -10,4 +10,4 @@ rpc url：https://sepolia.base.org
 chainid：84532
 symbol：ETH
 explorer：https://sepolia.basescan.org
-bridge：https://superbridge.app/base-sepolia
+- sepolia bridge：https://superbridge.app/base-sepolia
