@@ -141,7 +141,6 @@ function App() {
         <section className="image-section">
           <div className="section-header">
             <div className="hero-card">
-              <span className="hero-pill">HTTP 402 · Crypto Paywall</span>
               <h1>X402 测试网</h1>
               <p className="hero-subtitle">支付 USDC 测试币，体验 30 秒钟即时解锁的付费图片</p>
               <ul className="hero-list">
@@ -198,6 +197,9 @@ function App() {
           )}
         </section>
       </main>
+      <footer>
+        <p>© 2025 X402演示案例 by ZeBin · wechat：bkra50</p>
+      </footer>
     </div>
   );
 }
